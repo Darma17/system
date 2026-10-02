@@ -1,0 +1,39 @@
+cat > system_report.sh << 'EOF'
+#!/bin/bash
+
+THRESHOLD=${1:-80}                       # batas usage, default 80 (bisa diubah: ./system_report.sh 50)
+LOGFILE="system_report_$(date +%Y%m%d).log"
+
+# Fungsi log: tampil di layar + simpan ke file, lengkap dengan timestamp
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOGFILE"
+}
+
+log "===== SYSTEM REPORT ====="
+
+# 1. Cek disk usage
+log "--- Disk Usage ---"
+df -hP | tail -n +2 | while read -r fs size used avail use mount; do
+  pct=${use%\%}
+  [[ $pct =~ ^[0-9]+$ ]] || continue
+
+  log "$mount : $use ($used dari $size)"
+
+  # 2. Kirim alert jika usage > threshold
+  if [ "$pct" -gt "$THRESHOLD" ]; then
+    log "ALERT: Partisi $mount usage $use melebihi ${THRESHOLD}%!"
+    logger -p user.warning "ALERT: Disk $mount usage $use melebihi ${THRESHOLD}%"
+  fi
+done
+
+# 4. Tampilkan 5 proses pemakai memori terbanyak
+log "--- 5 Proses Pemakai Memori Terbanyak ---"
+ps -eo pid,user,%mem,rss,comm --sort=-%mem | head -n 6 | while read -r line; do
+  log "$line"
+done
+
+log "===== SELESAI ====="
+EOF
+
+chmod +x system_report.sh
+./system_report.sh
